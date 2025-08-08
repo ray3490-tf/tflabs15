@@ -19,7 +19,9 @@ resource_tags = {
   "tags" = {
     department="Logistic"
     tier="Tier2"
+    app="word"
   }
 }
 
 webapp_slot = [ "webapp5000040040","staging"  ]
+

@@ -17,6 +17,7 @@ variable "resource_tags" {
     {
         department=string
         tier=string
+        app=string
     }
   ))
 }
