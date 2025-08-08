@@ -19,7 +19,7 @@ resource_tags = {
   "tags" = {
     department="Logistic"
     tier="Tier2"
-    app="word"
+    app="Office"
   }
 }
 
