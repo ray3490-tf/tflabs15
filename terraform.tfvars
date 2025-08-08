@@ -20,6 +20,7 @@ resource_tags = {
     department="Logistic"
     tier="Tier2"
     app="Office"
+    costcenter="010"
   }
 }
 
