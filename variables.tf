@@ -19,6 +19,7 @@ variable "resource_tags" {
         tier=string
         app=string
         costcenter=string
+        owner=string
     }
   ))
 }

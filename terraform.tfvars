@@ -21,6 +21,7 @@ resource_tags = {
     tier="Tier2"
     app="Office"
     costcenter="010"
+    owner="Ramon"
   }
 }
 
