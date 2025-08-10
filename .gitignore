@@ -6,3 +6,4 @@ terraform.exe
 *tfplan*
 cred2.tf
 cred.tf
+azure-pipelines.yml
