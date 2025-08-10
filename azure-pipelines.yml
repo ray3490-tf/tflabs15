@@ -41,4 +41,34 @@ stages:
               command: 'validate'
   - stage: tfdeploy
     condition: succeeded('tfvalidate')
+    dependsOn: tfvalidate
+    jobs: 
+      - job: apply
+        steps:
+           - task: TerraformInstaller@1
+             displayName: tfinstall
+             inputs:
+              terraformVersion: 'latest'
+           - task: TerraformTask@5
+             displayName: initialize terraform
+             inputs:
+              provider: 'azurerm'
+              command: 'init'
+              backendServiceArm: 'DevTestServiceConnection'
+              backendAzureRmResourceGroupName: '$(bkstrgrg)'
+              backendAzureRmStorageAccountName: '$(bkstrg)'
+              backendAzureRmContainerName: '$(bkcontainer)'
+              backendAzureRmKey: '$(bkstrkey)'
+           - task: TerraformTask@5
+             displayName: plan
+             inputs:
+               provider: 'azurerm'
+               command: 'plan'
+               environmentServiceNameAzureRM: 'DevTestServiceConnection'
+           - task: TerraformTask@5
+             displayName: apply 
+             inputs:
+               provider: 'azurerm'
+               command: 'apply'
+               environmentServiceNameAzureRM: 'DevTestServiceConnection'
     
