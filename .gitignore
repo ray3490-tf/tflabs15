@@ -8,3 +8,4 @@ cred2.tf
 cred.tf
 azure-pipelines.yml
 azure-pipelines-destroy.yml
+tf-init.ps1
