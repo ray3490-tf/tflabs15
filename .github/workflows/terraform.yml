@@ -8,7 +8,7 @@ on:
         required: true
         default: dev
         type: choice
-        options: [dev, uat, Prod]
+        options: [dev, uat, prod]
 
 permissions:
   contents: read
