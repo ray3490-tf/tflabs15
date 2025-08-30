@@ -1,4 +1,4 @@
-environment = "production"
+environment = "prod"
 location    = "uksouth"
 
 resource_groups = {

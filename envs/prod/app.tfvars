@@ -2,7 +2,7 @@ webapp = {
   name = "xva-web-prod"
   plan = {
     # name omitted -> defaults to "<app-name>-plan"
-    sku_name     = "P1v3"
+    sku_name     = "B1"
     os_type      = "Linux"
     worker_count = 2
   }
