@@ -8,7 +8,7 @@ resource_groups = {
 defaults = {
   plan_sku = "S1"
   tags = {
-    application = "xva"
+    application = "AAA"
     environment = "uat"
     managedBy   = "terraform"
   }
