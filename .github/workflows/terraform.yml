@@ -102,7 +102,7 @@ jobs:
 
       - name: Terraform Init (AzureRM backend via AAD)
         run: |
-          terraform init \
+          terraform init -reconfigure \
             -backend-config="resource_group_name=${TFSTATE_RESOURCE_GROUP}" \
             -backend-config="storage_account_name=${TFSTATE_STORAGE_ACCOUNT}" \
             -backend-config="container_name=${TFSTATE_CONTAINER}" \
