@@ -26,7 +26,7 @@ variable "webapp" {
 
     plan = optional(object({
       name         = optional(string)
-      sku_name     = optional(string)   # B1 | S1 | P1v3 ...
+      sku_name     = optional(string)   # e.g., B1 | S1 | P1v3
       os_type      = optional(string)   # Windows | Linux
       worker_count = optional(number)
     }), {})

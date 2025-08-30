@@ -1,14 +1,12 @@
 locals {
+  # Build effective inputs using coalesce(try(), default)
   webapp_effective = {
     name = var.webapp.name
 
     rg  = coalesce(try(var.webapp.resource_group_name, null), var.resource_groups.workload)
     loc = coalesce(try(var.webapp.location, null),            var.location)
 
-    tags = merge(
-      var.defaults.tags,
-      coalesce(try(var.webapp.tags, null), {})
-    )
+    tags = merge(var.defaults.tags, coalesce(try(var.webapp.tags, null), {}))
 
     plan = {
       name         = coalesce(try(var.webapp.plan.name, null), "${var.webapp.name}-plan")
