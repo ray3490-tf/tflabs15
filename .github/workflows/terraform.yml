@@ -1,12 +1,7 @@
-name: Terraform Azure (minimal with backend)
+name: Terraform Azure — Manual Plan & Apply
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - "**/*.tf"
-      - ".github/workflows/terraform-azure-min.yml"
-  workflow_dispatch:
+  workflow_dispatch:   # <-- manual trigger only
 
 permissions:
   contents: read
@@ -14,28 +9,21 @@ permissions:
 env:
   TF_IN_AUTOMATION: true
 
-  # Azure auth (from Secrets)
-  ARM_CLIENT_ID:       ${{ secrets.AZURE_AD_APPLICATION_ID }}
-  ARM_CLIENT_SECRET:   ${{ secrets.AZURE_AD_CLIENT_SECRET }}
-  ARM_TENANT_ID:       ${{ secrets.AZURE_AD_TENANT_ID }}
-  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-  # Backend settings (put these as repo variables or secrets)
+  # Backend settings (set as repo variables or secrets)
   TFSTATE_RESOURCE_GROUP:  ${{ vars.TFSTATE_RESOURCE_GROUP }}
   TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
   TFSTATE_CONTAINER:       ${{ vars.TFSTATE_CONTAINER }}
   TFSTATE_KEY:             ${{ vars.TFSTATE_KEY }}
 
 jobs:
-  deploy:
+  plan:
+    name: Terraform Plan
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.8.5
 
@@ -43,10 +31,10 @@ jobs:
         uses: azure/login@v2
         with:
           creds: >-
-                  {"clientId":"${{ secrets.AZURE_AD_APPLICATION_ID }}",
-                  "clientSecret":"${{ secrets.AZURE_AD_CLIENT_SECRET }}",
-                  "subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}",
-                  "tenantId":"${{ secrets.AZURE_AD_TENANT_ID }}"}
+            {"clientId":"${{ secrets.AZURE_AD_APPLICATION_ID }}",
+             "clientSecret":"${{ secrets.AZURE_AD_CLIENT_SECRET }}",
+             "subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+             "tenantId":"${{ secrets.AZURE_AD_TENANT_ID }}"}
 
       - name: Terraform Init (AzureRM backend via AAD)
         run: |
@@ -57,9 +45,61 @@ jobs:
             -backend-config="key=${TFSTATE_KEY}" \
             -backend-config="use_azuread_auth=true"
 
-      - name: Terraform Validate
-        run: terraform validate
+      - name: Validate
+        run: |
+          terraform fmt -check -recursive || true
+          terraform validate
 
-      - name: Terraform Apply (auto-approve)
-        run: terraform apply -auto-approve -input=false
+      - name: Plan
+        run: terraform plan -input=false -out=tfplan.binary
 
+      - name: Save plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: tfplan.binary
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Show plan (human-readable)
+        run: terraform show -no-color tfplan.binary >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    name: Terraform Apply (requires approval)
+    needs: [ plan ]
+    runs-on: ubuntu-latest
+    environment: Prod   # <-- configure approval in GitHub Environments
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Azure Login (service principal secret)
+        uses: azure/login@v2
+        with:
+          creds: >-
+            {"clientId":"${{ secrets.AZURE_AD_APPLICATION_ID }}",
+             "clientSecret":"${{ secrets.AZURE_AD_CLIENT_SECRET }}",
+             "subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+             "tenantId":"${{ secrets.AZURE_AD_TENANT_ID }}"}
+
+      - name: Terraform Init (AzureRM backend via AAD)
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${TFSTATE_RESOURCE_GROUP}" \
+            -backend-config="storage_account_name=${TFSTATE_STORAGE_ACCOUNT}" \
+            -backend-config="container_name=${TFSTATE_CONTAINER}" \
+            -backend-config="key=${TFSTATE_KEY}" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: .
+
+      - name: Apply approved plan
+        run: terraform apply -input=false -auto-approve tfplan.binary
