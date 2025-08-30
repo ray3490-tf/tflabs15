@@ -1,36 +1,64 @@
-# This is a basic workflow to help you get started with Actions
+name: Terraform Azure (minimal with backend)
 
-name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
-  # Allows you to run this workflow manually from the Actions tab
+    paths:
+      - "**/*.tf"
+      - ".github/workflows/terraform-azure-min.yml"
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: true
+
+  # Azure auth (from Secrets)
+  ARM_CLIENT_ID:       ${{ secrets.AZURE_AD_APPLICATION_ID }}
+  ARM_CLIENT_SECRET:   ${{ secrets.AZURE_AD_CLIENT_SECRET }}
+  ARM_TENANT_ID:       ${{ secrets.AZURE_AD_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  # Backend settings (put these as repo variables or secrets)
+  TFSTATE_RESOURCE_GROUP:  ${{ vars.TFSTATE_RESOURCE_GROUP }}
+  TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
+  TFSTATE_CONTAINER:       ${{ vars.TFSTATE_CONTAINER }}
+  TFSTATE_KEY:             ${{ vars.TFSTATE_KEY }}
+
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  deploy:
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Azure Login (service principal)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.ARM_CLIENT_ID }}
+          client-secret: ${{ env.ARM_CLIENT_SECRET }}
+          tenant-id: ${{ env.ARM_TENANT_ID }}
+          subscription-id: ${{ env.ARM_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init (AzureRM backend via AAD)
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          terraform init \
+            -backend-config="resource_group_name=${TFSTATE_RESOURCE_GROUP}" \
+            -backend-config="storage_account_name=${TFSTATE_STORAGE_ACCOUNT}" \
+            -backend-config="container_name=${TFSTATE_CONTAINER}" \
+            -backend-config="key=${TFSTATE_KEY}" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Apply (auto-approve)
+        run: terraform apply -auto-approve -input=false
+
