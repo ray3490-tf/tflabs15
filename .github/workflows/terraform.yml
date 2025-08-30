@@ -15,13 +15,12 @@ permissions:
 
 env:
   TF_IN_AUTOMATION: true
-  # Azure SP creds for provider & backend (use your existing secrets)
+  # Azure SP creds for provider & backend
   ARM_CLIENT_ID:       ${{ secrets.AZURE_AD_APPLICATION_ID }}
   ARM_CLIENT_SECRET:   ${{ secrets.AZURE_AD_CLIENT_SECRET }}
   ARM_TENANT_ID:       ${{ secrets.AZURE_AD_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-  # Shared backend settings (put these as repo Variables or Secrets)
+  # Shared backend container
   TFSTATE_RESOURCE_GROUP:  ${{ vars.TFSTATE_RESOURCE_GROUP }}
   TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
   TFSTATE_CONTAINER:       ${{ vars.TFSTATE_CONTAINER }}
@@ -38,7 +37,7 @@ jobs:
         with:
           terraform_version: 1.8.5
 
-      - name: Azure Login (service principal secret)
+      - name: Azure Login (service principal)
         uses: azure/login@v2
         with:
           creds: >-
@@ -47,13 +46,16 @@ jobs:
              "subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}",
              "tenantId":"${{ secrets.AZURE_AD_TENANT_ID }}"}
 
+      # Build the key from the chosen env (dev → dev.tfstate, etc.)
       - name: Terraform Init (AzureRM backend via AAD)
         run: |
+          KEY="${{ github.event.inputs.target_env }}.tfstate"
+          echo "Plan using state key: $KEY"
           terraform init -reconfigure \
             -backend-config="resource_group_name=${TFSTATE_RESOURCE_GROUP}" \
             -backend-config="storage_account_name=${TFSTATE_STORAGE_ACCOUNT}" \
             -backend-config="container_name=${TFSTATE_CONTAINER}" \
-            -backend-config="key=${{ github.event.inputs.target_env }}.tfstate" \
+            -backend-config="key=${KEY}" \
             -backend-config="use_azuread_auth=true"
 
       - name: Validate
@@ -63,11 +65,15 @@ jobs:
 
       - name: Plan (${{ github.event.inputs.target_env }})
         run: |
+          # Optional guardrails: ensure tfvars exist
+          test -f "envs/${{ github.event.inputs.target_env }}/env.tfvars"
+          test -f "envs/${{ github.event.inputs.target_env }}/app.tfvars"
+
           terraform plan -input=false -out=tfplan.binary \
             -var-file="envs/${{ github.event.inputs.target_env }}/env.tfvars" \
             -var-file="envs/${{ github.event.inputs.target_env }}/app.tfvars"
 
-      - name: Save plan artifact
+      - name: Upload plan artifact
         uses: actions/upload-artifact@v4
         with:
           name: tfplan-${{ github.event.inputs.target_env }}
@@ -81,8 +87,7 @@ jobs:
     name: Terraform Apply (${{ github.event.inputs.target_env }})
     needs: [ plan ]
     runs-on: ubuntu-latest
-    # Gate by GitHub Environment to get per-env approvals:
-    environment: ${{ github.event.inputs.target_env }}
+    environment: ${{ github.event.inputs.target_env }}   # gates approvals + exposes env vars
 
     steps:
       - uses: actions/checkout@v4
@@ -91,7 +96,7 @@ jobs:
         with:
           terraform_version: 1.8.5
 
-      - name: Azure Login (service principal secret)
+      - name: Azure Login (service principal)
         uses: azure/login@v2
         with:
           creds: >-
@@ -100,13 +105,15 @@ jobs:
              "subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}",
              "tenantId":"${{ secrets.AZURE_AD_TENANT_ID }}"}
 
+      # Here we use the per-environment TFSTATE_KEY variable from the gated environment
       - name: Terraform Init (AzureRM backend via AAD)
         run: |
+          echo "Apply using state key: ${{ vars.TFSTATE_KEY }}"
           terraform init -reconfigure \
             -backend-config="resource_group_name=${TFSTATE_RESOURCE_GROUP}" \
             -backend-config="storage_account_name=${TFSTATE_STORAGE_ACCOUNT}" \
             -backend-config="container_name=${TFSTATE_CONTAINER}" \
-            -backend-config="key=${{ github.event.inputs.target_env }}.tfstate" \
+            -backend-config="key=${{ vars.TFSTATE_KEY }}" \
             -backend-config="use_azuread_auth=true"
 
       - name: Download approved plan
