@@ -1,0 +1,133 @@
+name: Terraform Azure — Manual Destroy (Plan → Approve → Destroy)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: "Environment to DESTROY"
+        required: true
+        default: dev
+        type: choice
+        options: [dev, uat, prod]
+
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: true
+  # Azure SP creds for provider & backend (same secrets you use today)
+  ARM_CLIENT_ID:       ${{ secrets.AZURE_AD_APPLICATION_ID }}
+  ARM_CLIENT_SECRET:   ${{ secrets.AZURE_AD_CLIENT_SECRET }}
+  ARM_TENANT_ID:       ${{ secrets.AZURE_AD_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  # Shared backend container (same repo variables)
+  TFSTATE_RESOURCE_GROUP:  ${{ vars.TFSTATE_RESOURCE_GROUP }}
+  TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
+  TFSTATE_CONTAINER:       ${{ vars.TFSTATE_CONTAINER }}
+
+jobs:
+  plan_destroy:
+    name: Plan Destroy (${{ github.event.inputs.target_env }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Azure Login (service principal secret)
+        uses: azure/login@v2
+        with:
+          creds: >-
+            {"clientId":"${{ secrets.AZURE_AD_APPLICATION_ID }}",
+             "clientSecret":"${{ secrets.AZURE_AD_CLIENT_SECRET }}",
+             "subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+             "tenantId":"${{ secrets.AZURE_AD_TENANT_ID }}"}
+
+      - name: Terraform Init (AzureRM backend via AAD)
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="${{ github.event.inputs.target_env }}.tfstate"
+          echo "Destroy PLAN using state key: $KEY"
+          terraform init -reconfigure \
+            -backend-config="resource_group_name=${TFSTATE_RESOURCE_GROUP}" \
+            -backend-config="storage_account_name=${TFSTATE_STORAGE_ACCOUNT}" \
+            -backend-config="container_name=${TFSTATE_CONTAINER}" \
+            -backend-config="key=${KEY}" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Validate
+        run: |
+          set -euo pipefail
+          terraform fmt -check -recursive || true
+          terraform validate
+
+      - name: Plan -destroy (${{ github.event.inputs.target_env }})
+        run: |
+          set -euo pipefail
+          test -f "envs/${{ github.event.inputs.target_env }}/env.tfvars"
+          test -f "envs/${{ github.event.inputs.target_env }}/app.tfvars"
+          terraform plan -destroy -lock-timeout=5m -input=false -out=tfplan.destroy \
+            -var-file="envs/${{ github.event.inputs.target_env }}/env.tfvars" \
+            -var-file="envs/${{ github.event.inputs.target_env }}/app.tfvars"
+
+      - name: Upload destroy plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-destroy-${{ github.event.inputs.target_env }}
+          path: tfplan.destroy
+          retention-days: 7
+
+      - name: Show destroy plan (human-readable)
+        run: terraform show -no-color tfplan.destroy >> "$GITHUB_STEP_SUMMARY"
+
+  destroy:
+    name: Destroy Apply (${{ github.event.inputs.target_env }})
+    needs: [ plan_destroy ]
+    runs-on: ubuntu-latest
+    # Gate with the real environment so you get the same approval flow
+    environment: ${{ github.event.inputs.target_env }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Azure Login (service principal secret)
+        uses: azure/login@v2
+        with:
+          creds: >-
+            {"clientId":"${{ secrets.AZURE_AD_APPLICATION_ID }}",
+             "clientSecret":"${{ secrets.AZURE_AD_CLIENT_SECRET }}",
+             "subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+             "tenantId":"${{ secrets.AZURE_AD_TENANT_ID }}"}
+
+      - name: Terraform Init (AzureRM backend via AAD)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Prefer per-environment TFSTATE_KEY if you defined it on the Environment; fallback to <env>.tfstate
+          KEY="${{ vars.TFSTATE_KEY }}"
+          if [[ -z "$KEY" ]]; then KEY="${{ github.event.inputs.target_env }}.tfstate"; fi
+          echo "Destroy APPLY using state key: $KEY"
+          terraform init -reconfigure \
+            -backend-config="resource_group_name=${TFSTATE_RESOURCE_GROUP}" \
+            -backend-config="storage_account_name=${TFSTATE_STORAGE_ACCOUNT}" \
+            -backend-config="container_name=${TFSTATE_CONTAINER}" \
+            -backend-config="key=${KEY}" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Download destroy plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-destroy-${{ github.event.inputs.target_env }}
+          path: .
+
+      - name: Apply destroy plan
+        run: terraform apply -lock-timeout=5m -input=false -auto-approve tfplan.destroy
