@@ -1,0 +1,58 @@
+name: Force Unlock TFState
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: "Environment whose state to unlock"
+        required: true
+        default: uat
+        type: choice
+        options: [dev, uat, prod]
+      lock_id:
+        description: "Lock ID from the error message"
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: true
+  ARM_CLIENT_ID:       ${{ secrets.AZURE_AD_APPLICATION_ID }}
+  ARM_CLIENT_SECRET:   ${{ secrets.AZURE_AD_CLIENT_SECRET }}
+  ARM_TENANT_ID:       ${{ secrets.AZURE_AD_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  TFSTATE_RESOURCE_GROUP:  ${{ vars.TFSTATE_RESOURCE_GROUP }}
+  TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
+  TFSTATE_CONTAINER:       ${{ vars.TFSTATE_CONTAINER }}
+
+jobs:
+  unlock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.8.5 }
+
+      - name: Azure Login (service principal)
+        uses: azure/login@v2
+        with:
+          creds: >-
+            {"clientId":"${{ secrets.AZURE_AD_APPLICATION_ID }}",
+             "clientSecret":"${{ secrets.AZURE_AD_CLIENT_SECRET }}",
+             "subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+             "tenantId":"${{ secrets.AZURE_AD_TENANT_ID }}"}
+
+      - name: Init backend for selected env
+        run: |
+          KEY="${{ github.event.inputs.target_env }}.tfstate"
+          echo "Using state key: $KEY"
+          terraform init -reconfigure \
+            -backend-config="resource_group_name=${TFSTATE_RESOURCE_GROUP}" \
+            -backend-config="storage_account_name=${TFSTATE_STORAGE_ACCOUNT}" \
+            -backend-config="container_name=${TFSTATE_CONTAINER}" \
+            -backend-config="key=${KEY}" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: Force unlock
+        run: terraform force-unlock -force "${{ github.event.inputs.lock_id }}"
