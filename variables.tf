@@ -1,8 +1,13 @@
-variable "environment" { type = string }
-variable "location"    { type = string }
+variable "environment" { 
+    type = string 
+}
+
+variable "location"    { 
+    type = string 
+}
 
 variable "resource_groups" {
-  description = "Resource groups by concern."
+  description = "Resource groups"
   type = object({
     workload = string
   })

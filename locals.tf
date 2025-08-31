@@ -1,5 +1,5 @@
 locals {
-  # Build effective inputs using coalesce(try(), default)
+  
   webapp_effective = {
     name = var.webapp.name
 
