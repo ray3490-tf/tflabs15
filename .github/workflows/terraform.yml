@@ -69,7 +69,7 @@ jobs:
           test -f "envs/${{ github.event.inputs.target_env }}/env.tfvars"
           test -f "envs/${{ github.event.inputs.target_env }}/app.tfvars"
 
-          terraform plan -input=false -out=tfplan.binary \
+          terraform plan -lock-timeout=5m -input=false -out=tfplan.binary \
             -var-file="envs/${{ github.event.inputs.target_env }}/env.tfvars" \
             -var-file="envs/${{ github.event.inputs.target_env }}/app.tfvars"
 
@@ -123,4 +123,4 @@ jobs:
           path: .
 
       - name: Apply approved plan
-        run: terraform apply -input=false -auto-approve tfplan.binary
+        run: terraform apply -lock-timeout=5m -input=false -auto-approve tfplan.binary
