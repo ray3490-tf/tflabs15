@@ -9,6 +9,10 @@ on:
         default: dev
         type: choice
         options: [dev, uat, prod]
+      confirm:
+        description: 'Type EXACTLY "DESTROY" to allow deletion (case-sensitive)'
+        required: true
+        default: ""
 
 permissions:
   contents: read
@@ -89,10 +93,17 @@ jobs:
     name: Destroy Apply (${{ github.event.inputs.target_env }})
     needs: [ plan_destroy ]
     runs-on: ubuntu-latest
-    # Gate with the real environment so you get the same approval flow
-    environment: ${{ github.event.inputs.target_env }}
+    environment: ${{ github.event.inputs.target_env }}  # approvals happen here
 
     steps:
+      - name: Require typed confirmation
+        shell: bash
+        run: |
+          if [[ "${{ github.event.inputs.confirm }}" != "DESTROY" ]]; then
+            echo "::error::Confirmation failed. You must type EXACTLY 'DESTROY' to proceed."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       - uses: hashicorp/setup-terraform@v3
@@ -112,7 +123,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Prefer per-environment TFSTATE_KEY if you defined it on the Environment; fallback to <env>.tfstate
           KEY="${{ vars.TFSTATE_KEY }}"
           if [[ -z "$KEY" ]]; then KEY="${{ github.event.inputs.target_env }}.tfstate"; fi
           echo "Destroy APPLY using state key: $KEY"
