@@ -9,9 +9,10 @@ resource "azurerm_resource_group" "this" {
   name     = var.name
   location = var.location
   tags     = var.tags
-
+/*
   # Safer defaults for shared RGs
   lifecycle {
     prevent_destroy = true
   }
+  */
 }
