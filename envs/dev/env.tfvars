@@ -2,13 +2,13 @@ environment = "dev"
 location    = "uksouth"
 
 resource_groups = {
-  workload = "rg-xva-dev"
+  workload = "rg-poc-dev"
 }
 
 defaults = {
   plan_sku = "B1"
   tags = {
-    application = "xva"
+    application = "poc"
     environment = "dev"
     managedBy   = "terraform"
   }

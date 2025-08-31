@@ -1,5 +1,5 @@
 webapp = {
-  name = "xva-web-dev"
+  name = "poc-web-dev"
   plan = {
     # name omitted -> defaults to "<app-name>-plan"
     sku_name     = "B1"

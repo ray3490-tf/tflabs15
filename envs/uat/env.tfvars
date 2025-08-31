@@ -2,13 +2,13 @@ environment = "uat"
 location    = "uksouth"
 
 resource_groups = {
-  workload = "rg-xva-uat"
+  workload = "rg-poc-uat"
 }
 
 defaults = {
   plan_sku = "S1"
   tags = {
-    application = "AAA"
+    application = "poc"
     environment = "uat"
     managedBy   = "terraform"
   }
