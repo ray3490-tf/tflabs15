@@ -1,4 +1,4 @@
-name: Terraform Azure — Manual Destroy (Plan → Approve → Destroy)
+name: Destroy (Plan → Approve → Destroy)
 
 on:
   workflow_dispatch:

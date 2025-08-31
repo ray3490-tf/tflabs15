@@ -1,4 +1,4 @@
-name: Terraform Azure — Manual Multi-Env (Plan → Approve → Apply)
+name: Apply (Plan → Approve → Apply)
 
 on:
   workflow_dispatch:
